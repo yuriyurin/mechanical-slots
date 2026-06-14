@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mechanical Slots TWA</title>
+    <!-- Подключение Telegram Web App SDK -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --gold: #d4af37;
+            --gold-dark: #aa8c2c;
+            --wood: #3e2723;
+            --wood-light: #5d4037;
+            --red: #8b0000;
+            --metal: #c0c0c0;
+            --metal-dark: #808080;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--tg-theme-bg-color, #1a1a1a);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100dvh;
+            font-family: 'Courier New', monospace;
+            color: var(--gold);
+            overflow: hidden;
+            user-select: none;
+            touch-action: none; /* Запрет зума и скролла */
+            overscroll-behavior: none;
+        }
+
+        .machine {
+            position: relative;
+            width: 95%;
+            max-width: 380px;
+            background: linear-gradient(135deg, var(--wood) 0%, var(--wood-light) 50%, var(--wood) 100%);
+            border-radius: 20px;
+            padding: 20px 20px 30px 20px;
+            box-shadow: 
+                inset 0 0 20px rgba(0,0,0,0.8),
+                0 10px 30px rgba(0,0,0,0.6),
+                0 0 0 4px var(--gold-dark),
+                0 0 0 8px var(--wood);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 22px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+            color: var(--gold);
+            text-transform: uppercase;
+        }
+
+        .reels-container {
+            position: relative;
+            width: 100%;
+            height: 180px;
+            background: #000;
+            border-radius: 10px;
+            border: 4px solid var(--metal);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.9);
+            overflow: hidden;
+            display: flex;
+            justify-content: space-around;
+            padding: 0 10px;
+        }
+
+        .reels-container::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 40%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%);
+            pointer-events: none;
+            z-index: 10;
+            border-radius: 6px 6px 0 0;
+        }
+
+        .payline {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: rgba(255, 0, 0, 0.7);
+            transform: translateY(-50%);
+            z-index: 5;
+            box-shadow: 0 0 8px red;
+        }
+        .payline::before, .payline::after {
+            content: '◀';
+            position: absolute;
+            top: -10px;
+            color: red;
+            font-size: 20px;
+            text-shadow: 0 0 5px red;
+        }
+        .payline::before { left: -15px; }
+        .payline::after { right: -15px; content: '▶'; }
+
+        .reel {
+            width: 33%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(to right, #111 0%, #222 50%, #111 100%);
+            border-left: 1px solid #333;
+            border-right: 1px solid #333;
+        }
+
+        .reel-strip {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            will-change: transform, filter;
+        }
+
+        .symbol {
+            width: 100%;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 38px;
+            line-height: 60px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .blur-fast { filter: blur(4px); }
+        .blur-medium { filter: blur(2px); }
+
+        /* Рычаг адаптирован для тача */
+        .lever-base {
+            position: absolute;
+            right: -30px;
+            top: 50px;
+            width: 30px;
+            height: 70px;
+            background: linear-gradient(to right, var(--metal-dark), var(--metal));
+            border-radius: 0 10px 10px 0;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+        }
+
+        .lever-arm {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            width: 10px;
+            height: 100px;
+            background: linear-gradient(to right, #999, #fff, #999);
+            transform-origin: bottom center;
+            transform: rotate(0deg);
+            border-radius: 6px;
+            cursor: grab;
+            touch-action: none;
+            transition: transform 0.1s linear;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
+        }
+        .lever-arm:active { cursor: grabbing; }
+
+        .lever-knob {
+            position: absolute;
+            top: -20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 44px; /* Чуть больше для удобного тача */
+            height: 44px;
+            background: radial-gradient(circle at 30% 30%, #ff4444, #8b0000);
+            border-radius: 50%;
+            box-shadow: 
+                inset -2px -2px 5px rgba(0,0,0,0.5),
+                2px 2px 5px rgba(0,0,0,0.5);
+        }
+
+        .control-panel {
+            margin-top: 20px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .display {
+            background: #000;
+            border: 2px solid var(--metal-dark);
+            border-radius: 5px;
+            padding: 10px;
+            text-align: center;
+            font-size: 18px;
+            color: #0f0;
+            text-shadow: 0 0 5px #0f0;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 15px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.4), 0 5px 10px rgba(0,0,0,0.3);
+            transition: all 0.1s;
+            font-family: inherit;
+            touch-action: manipulation;
+        }
+        .btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 rgba(0,0,0,0.4), inset 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .btn-bet { background: linear-gradient(to bottom, #4caf50, #2e7d32); color: white; }
+        .btn-stop { background: linear-gradient(to bottom, #f44336, #c62828); color: white; }
+        .btn-max { background: linear-gradient(to bottom, #ff9800, #e65100); color: white; }
+        .btn:disabled {
+            background: #555; color: #888; cursor: not-allowed;
+            box-shadow: none; transform: translateY(4px);
+        }
+
+        .info {
+            text-align: center;
+            font-size: 11px;
+            color: #ccc;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+
+        .win-animation {
+            animation: pulse 0.5s infinite alternate;
+        }
+        @keyframes pulse {
+            from { box-shadow: inset 0 0 20px rgba(0,0,0,0.9), 0 0 10px var(--gold); }
+            to { box-shadow: inset 0 0 20px rgba(0,0,0,0.9), 0 0 30px var(--gold), 0 0 50px red; }
+        }
+
+        .tension-meter {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            margin-top: 5px;
+            overflow: hidden;
+            display: none;
+        }
+        .tension-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(to right, #4caf50, #ffeb3b, #f44336);
+            transition: width 0.05s linear;
+        }
+    </style>
+</head>
+<body>
+
+<div class="machine">
+    <div class="title">MECHANICAL SLOTS</div>
+    
+    <div class="reels-container" id="reelsContainer">
+        <div class="payline"></div>
+        <div class="reel"><div class="reel-strip" id="reel1"></div></div>
+        <div class="reel"><div class="reel-strip" id="reel2"></div></div>
+        <div class="reel"><div class="reel-strip" id="reel3"></div></div>
+    </div>
+
+    <div class="lever-base">
+        <div class="lever-arm" id="lever">
+            <div class="lever-knob"></div>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <div class="display" id="creditDisplay">КРЕДИТ: 1000 🪙</div>
+        <div class="display" id="betDisplay" style="font-size: 15px; color: #ff0;">СТАВКА: 100 🪙</div>
+        
+        <div class="tension-meter" id="tensionMeter">
+            <div class="tension-fill" id="tensionFill"></div>
+        </div>
+
+        <div class="buttons">
+            <button class="btn btn-bet" id="btnBet" onclick="changeBet()">СТАВКА</button>
+            <button class="btn btn-stop" id="btnStop" onclick="emergencyStop()" disabled>⏹️ СТОП</button>
+            <button class="btn btn-max" id="btnMax" onclick="maxBet()">MAX</button>
+        </div>
+        
+        <div class="info">
+            🍒x2 | 🍊x3 | 🍉x5 | ⭐x7 | 🔔x10<br>
+            3 одинаковых = xMult | Пара = xMult/2<br>
+            <span style="color: var(--gold);">Потяните красный шар вниз!</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- ИНИЦИАЛИЗАЦИЯ TELEGRAM WEB APP ---
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand(); // Разворачиваем на весь экран
+    
+    // Настройка цветов под тему Telegram (опционально, но мы сохраняем стиль дерева)
+    document.body.style.backgroundColor = tg.themeParams.bg_color || '#1a1a1a';
+
+    // --- КОНФИГУРАЦИЯ ---
+    const SYMBOLS = [
+        { icon: '🍒', mult: 2, weight: 40 },
+        { icon: '🍊', mult: 3, weight: 30 },
+        { icon: '🍉', mult: 5, weight: 15 },
+        { icon: '⭐', mult: 7, weight: 10 },
+        { icon: '🔔', mult: 10, weight: 5 }
+    ];
+    
+    const REEL_HEIGHT = 180;
+    const SYMBOL_HEIGHT = 60;
+    const SYMBOLS_PER_REEL = 30;
+    
+    // --- СОСТОЯНИЕ ---
+    let credits = 1000;
+    let currentBet = 100;
+    let isSpinning = false;
+    let reels = [[], [], []];
+    let reelPositions = [0, 0, 0];
+    let reelSpeeds = [0, 0, 0];
+    let animationId = null;
+    let stopRequested = [false, false, false];
+    let audioCtx = null;
+    let lastHapticTime = 0;
+
+    // --- АУДИО ---
+    function initAudio() {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playClick() {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.05);
+        gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.05);
+    }
+
+    function playClunk() {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+    }
+
+    function playWin() {
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.15, now + i * 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now + i * 0.1);
+            osc.stop(now + i * 0.1 + 0.3);
+        });
+    }
+
+    // --- ГЕНЕРАЦИЯ И РЕНДЕР ---
+    function generateReelStrip() {
+        let strip = [];
+        for (let i = 0; i < SYMBOLS_PER_REEL; i++) {
+            const rand = Math.random() * 100;
+            let cumulative = 0;
+            for (let sym of SYMBOLS) {
+                cumulative += sym.weight;
+                if (rand <= cumulative) { strip.push(sym); break; }
+            }
+        }
+        return strip;
+    }
+
+    function renderReels() {
+        for (let i = 0; i < 3; i++) {
+            reels[i] = generateReelStrip();
+            const el = document.getElementById(`reel${i+1}`);
+            el.innerHTML = '';
+            const combined = [...reels[i], ...reels[i], ...reels[i]];
+            combined.forEach(sym => {
+                const div = document.createElement('div');
+                div.className = 'symbol';
+                div.textContent = sym.icon;
+                el.appendChild(div);
+            });
+            reelPositions[i] = -SYMBOL_HEIGHT * 1.5; 
+            updateReelVisual(i);
+        }
+    }
+
+    function updateReelVisual(reelIndex) {
+        const el = document.getElementById(`reel${reelIndex+1}`);
+        el.style.transform = `translateY(${reelPositions[reelIndex]}px)`;
+        const speed = Math.abs(reelSpeeds[reelIndex]);
+        el.classList.remove('blur-fast', 'blur-medium');
+        if (speed > 30) el.classList.add('blur-fast');
+        else if (speed > 10) el.classList.add('blur-medium');
+    }
+
+    // --- ФИЗИКА РЫЧАГА + HAPTIC FEEDBACK ---
+    const lever = document.getElementById('lever');
+    let isDragging = false;
+    let startY = 0;
+    let currentPull = 0;
+    const MAX_PULL = 80;
+
+    lever.addEventListener('mousedown', startPull);
+    lever.addEventListener('touchstart', startPull, {passive: false});
+    window.addEventListener('mousemove', updatePull);
+    window.addEventListener('touchmove', updatePull, {passive: false});
+    window.addEventListener('mouseup', endPull);
+    window.addEventListener('touchend', endPull);
+
+    function startPull(e) {
+        if (isSpinning) return;
+        isDragging = true;
+        startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        initAudio();
+        document.getElementById('tensionMeter').style.display = 'block';
+        // Легкая вибрация при начале натяжения
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    }
+
+    function updatePull(e) {
+        if (!isDragging) return;
+        e.preventDefault();
+        const y = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        let diff = y - startY;
+        if (diff < 0) diff = 0;
+        if (diff > MAX_PULL) diff = MAX_PULL;
+        
+        currentPull = diff;
+        const rotation = (currentPull / MAX_PULL) * 45;
+        lever.style.transform = `rotate(${rotation}deg)`;
+        
+        const tensionPct = (currentPull / MAX_PULL) * 100;
+        document.getElementById('tensionFill').style.width = `${tensionPct}%`;
+    }
+
+    function endPull() {
+        if (!isDragging) return;
+        isDragging = false;
+        document.getElementById('tensionMeter').style.display = 'none';
+        
+        lever.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
+        lever.style.transform = 'rotate(0deg)';
+        setTimeout(() => { lever.style.transition = 'transform 0.1s linear'; }, 300);
+
+        if (currentPull > 20) {
+            startSpin(currentPull);
+        }
+        currentPull = 0;
+        document.getElementById('tensionFill').style.width = '0%';
+    }
+
+    // --- ЛОГИКА ВРАЩЕНИЯ ---
+    function startSpin(force) {
+        if (credits < currentBet) {
+            tg.showAlert("Недостаточно кредитов!");
+            return;
+        }
+        
+        credits -= currentBet;
+        updateDisplay();
+        
+        isSpinning = true;
+        stopRequested = [false, false, false];
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('btnBet').disabled = true;
+        document.getElementById('btnMax').disabled = true;
+        document.getElementById('reelsContainer').classList.remove('win-animation');
+
+        const baseSpeed = 20 + (force * 0.5);
+        for (let i = 0; i < 3; i++) {
+            reelSpeeds[i] = baseSpeed + (Math.random() * 10);
+        }
+        lastHapticTime = 0;
+        animate();
+    }
+
+    function animate() {
+        if (!isSpinning) return;
+        let allStopped = true;
+
+        for (let i = 0; i < 3; i++) {
+            if (stopRequested[i] || reelSpeeds[i] <= 0) {
+                if (reelSpeeds[i] > 0) {
+                    reelSpeeds[i] *= 0.9;
+                    if (reelSpeeds[i] < 2) {
+                        const currentPos = reelPositions[i];
+                        const targetPos = Math.round(currentPos / SYMBOL_HEIGHT) * SYMBOL_HEIGHT;
+                        const diff = targetPos - currentPos;
+                        reelPositions[i] += diff * 0.3;
+                        
+                        if (Math.abs(diff) < 1) {
+                            reelPositions[i] = targetPos;
+                            reelSpeeds[i] = 0;
+                            playClunk();
+                            // HAPTIC: Средний удар при остановке барабана
+                            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+                            
+                            while (reelPositions[i] <= -SYMBOL_HEIGHT * SYMBOLS_PER_REEL) {
+                                reelPositions[i] += SYMBOL_HEIGHT * SYMBOLS_PER_REEL;
+                            }
+                        }
+                    }
+                }
+                if (reelSpeeds[i] > 0) allStopped = false;
+            } else {
+                allStopped = false;
+                reelPositions[i] -= reelSpeeds[i];
+                
+                const posMod = Math.abs(reelPositions[i]) % SYMBOL_HEIGHT;
+                if (posMod < 5 && Date.now() - lastHapticTime > 60) {
+                    playClick();
+                    // HAPTIC: Очень легкий щелчок при вращении
+                    if (tg.HapticFeedback) tg.HapticFeedback.selectionChanged();
+                    lastHapticTime = Date.now();
+                }
+
+                if (reelPositions[i] <= -SYMBOL_HEIGHT * SYMBOLS_PER_REEL) {
+                    reelPositions[i] += SYMBOL_HEIGHT * SYMBOLS_PER_REEL;
+                }
+            }
+            updateReelVisual(i);
+        }
+
+        if (allStopped) {
+            isSpinning = false;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('btnBet').disabled = false;
+            document.getElementById('btnMax').disabled = false;
+            checkWin();
+        } else {
+            animationId = requestAnimationFrame(animate);
+        }
+    }
+
+    function emergencyStop() {
+        if (!isSpinning) return;
+        for (let i = 0; i < 3; i++) {
+            if (!stopRequested[i] && reelSpeeds[i] > 5) {
+                stopRequested[i] = true;
+                break;
+            }
+        }
+    }
+
+    // --- ПРОВЕРКА ВЫИГРЫША ---
+    function checkWin() {
+        const visibleSymbols = [];
+        for (let i = 0; i < 3; i++) {
+            let normPos = reelPositions[i] % (SYMBOL_HEIGHT * SYMBOLS_PER_REEL);
+            if (normPos > 0) normPos -= (SYMBOL_HEIGHT * SYMBOLS_PER_REEL);
+            let index = Math.round(Math.abs(normPos) / SYMBOL_HEIGHT) + 1;
+            index = index % SYMBOLS_PER_REEL;
+            visibleSymbols.push(reels[i][index]);
+        }
+
+        const counts = {};
+        visibleSymbols.forEach(sym => { counts[sym.icon] = (counts[sym.icon] || 0) + 1; });
+
+        let winAmount = 0;
+        let winSymbol = null;
+
+        for (let icon in counts) {
+            if (counts[icon] >= 2) {
+                const symData = SYMBOLS.find(s => s.icon === icon);
+                let mult = symData.mult;
+                if (counts[icon] === 2) mult = mult / 2;
+                winAmount += currentBet * mult;
+                winSymbol = icon;
+            }
+        }
+
+        if (winAmount > 0) {
+            credits += winAmount;
+            playWin();
+            // HAPTIC: Успешная вибрация при выигрыше
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+            
+            document.getElementById('reelsContainer').classList.add('win-animation');
+            
+            // Используем нативный попап Telegram для выигрыша
+            setTimeout(() => {
+                tg.showAlert(`🎉 ВЫИГРЫШ!\n\nВыпало: ${visibleSymbols.join(' ')}\nСумма: +${winAmount} 🪙`);
+                document.getElementById('reelsContainer').classList.remove('win-animation');
+            }, 600);
+        }
+        updateDisplay();
+    }
+
+    function updateDisplay() {
+        document.getElementById('creditDisplay').textContent = `КРЕДИТ: ${credits} 🪙`;
+        document.getElementById('betDisplay').textContent = `СТАВКА: ${currentBet} 🪙`;
+    }
+
+    function changeBet() {
+        if (isSpinning) return;
+        currentBet = currentBet === 100 ? 1000 : 100;
+        updateDisplay();
+    }
+
+    function maxBet() {
+        if (isSpinning) return;
+        currentBet = 1000;
+        updateDisplay();
+    }
+
+    renderReels();
+    updateDisplay();
+</script>
+</body>
+</html>
